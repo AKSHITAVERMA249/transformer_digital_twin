@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TX-001 Transformer Digital Twin — Live Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --normal: #22c55e;
+      --degraded: #ef4444;
+      --stale: #f59e0b;
+      --nodata: #64748b;
+      --offline: #ec4899;
+      --accent: #38bdf8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0; font-size: 1.45rem; }
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-top: 2px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      border: 1px solid transparent;
+    }
+    .badge-normal { background: rgba(34, 197, 94, 0.15); color: #86efac; border-color: rgba(34, 197, 94, 0.4); }
+    .badge-degraded { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border-color: rgba(239, 68, 68, 0.45); }
+    .badge-stale { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border-color: rgba(245, 158, 11, 0.45); }
+    .badge-nodata { background: rgba(100, 116, 139, 0.2); color: #cbd5e1; border-color: rgba(100, 116, 139, 0.45); }
+    .badge-offline { background: rgba(236, 72, 153, 0.18); color: #f9a8d4; border-color: rgba(236, 72, 153, 0.5); }
+    .badge-open-alert { background: rgba(239, 68, 68, 0.22); color: #fecaca; border-color: #ef4444; }
+    .hidden { display: none !important; }
+
+    .banner {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+    }
+    .banner-demo {
+      background: rgba(56, 189, 248, 0.08);
+      border-color: rgba(56, 189, 248, 0.3);
+      color: #bae6fd;
+    }
+    .banner-error {
+      background: rgba(236, 72, 153, 0.14);
+      border-color: rgba(236, 72, 153, 0.45);
+      color: #fbcfe8;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .card-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+    }
+    .card-value { font-size: 1.45rem; font-weight: 700; }
+    .card-sub { color: var(--muted); font-size: 0.82rem; margin-top: 4px; }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 10px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .chart-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 18px;
+    }
+    svg { width: 100%; height: 220px; display: block; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .pill-open { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+    .pill-recovered { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+    .muted { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Transformer Digital Twin — <span id="asset-id">TX-001</span></h1>
+        <div class="subtitle">
+          Live polling every 1.5s · Last refreshed: <span id="last-refreshed">Never</span>
+        </div>
+      </div>
+      <div class="badges">
+        <span id="health-badge" class="badge badge-nodata">No data</span>
+        <span id="open-alert-badge" class="badge badge-open-alert hidden">Open Alert</span>
+        <span id="connection-badge" class="badge badge-offline hidden">API unreachable · Not refreshed</span>
+      </div>
+    </header>
+
+    <div class="banner banner-demo">
+      <strong>Demo-Only Notice:</strong> Simulated telemetry, the steady-state expected top-oil baseline model,
+      and all thresholds / fixed-temperature comparators shown here are <strong>demo settings only</strong>,
+      not calibrated utility operating limits.
+    </div>
+
+    <div id="error-banner" class="banner banner-error hidden">
+      <strong>API unreachable:</strong> Polling failed (<span id="error-detail">connection error</span>).
+      Showing last successful values — <strong>not refreshed</strong>. Polling will resume automatically.
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-label">Observed vs Expected Top-Oil</div>
+        <div class="card-value">
+          <span id="observed-temp">—</span>
+          <span class="muted" style="font-size: 0.95rem;">/ <span id="expected-temp">—</span></span>
+        </div>
+        <div class="card-sub" id="load-ambient-sub">Load: — · Ambient: —</div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Thermal Deviation</div>
+        <div class="card-value" id="deviation-val">—</div>
+        <div class="card-sub" id="threshold-sub">Demo threshold: — · Fixed demo limit: —</div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Latest Reading Time</div>
+        <div class="card-value" style="font-size: 1.05rem;" id="latest-reading-at">—</div>
+        <div class="card-sub" id="counters-sub">Abnormal streak: 0 · Normal streak: 0</div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="section-title">
+        <span>Observed Top-Oil Temperature History (°C)</span>
+        <span class="muted" style="font-size: 0.8rem;" id="chart-meta">Waiting for telemetry…</span>
+      </div>
+      <svg id="temp-chart" viewBox="0 0 800 220" preserveAspectRatio="none" aria-label="Observed top-oil temperature history chart"></svg>
+    </div>
+
+    <div class="card">
+      <div class="section-title">
+        <span>Alert History</span>
+        <span class="muted" style="font-size: 0.8rem;" id="alerts-meta">0 episode(s)</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>State</th>
+            <th>Opened At (UTC)</th>
+            <th>Reason</th>
+            <th>Peak Dev</th>
+            <th>Recovered At (UTC)</th>
+          </tr>
+        </thead>
+        <tbody id="alerts-tbody">
+          <tr><td colspan="5" class="muted">No alerts recorded yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const ASSET_ID = "TX-001";
+    const POLL_MS = 1500;
+    let hasSuccessfulPoll = false;
+
+    function fmtNum(v, unit = "") {
+      return v === null || v === undefined ? "—" : `${Number(v).toFixed(2)}${unit}`;
+    }
+
+    function fmtTime(iso) {
+      if (!iso) return "—";
+      return iso.replace("T", " ").replace("+00:00", "Z");
+    }
+
+    function setHealthBadge(status) {
+      const el = document.getElementById("health-badge");
+      el.textContent = status;
+      el.className = "badge";
+      if (status === "Normal") el.classList.add("badge-normal");
+      else if (status === "Degraded") el.classList.add("badge-degraded");
+      else if (status === "Stale") el.classList.add("badge-stale");
+      else el.classList.add("badge-nodata");
+    }
+
+    function renderHealth(h) {
+      setHealthBadge(h.status);
+
+      const openBadge = document.getElementById("open-alert-badge");
+      if (h.has_open_alert) openBadge.classList.remove("hidden");
+      else openBadge.classList.add("hidden");
+
+      document.getElementById("observed-temp").textContent = fmtNum(h.observed_top_oil_temp_c, " °C");
+      document.getElementById("expected-temp").textContent = fmtNum(h.expected_top_oil_temp_c, " °C");
+      document.getElementById("load-ambient-sub").textContent =
+        `Load: ${fmtNum(h.load_pct, "%")} · Ambient: ${fmtNum(h.ambient_temp_c, " °C")}`;
+
+      const devEl = document.getElementById("deviation-val");
+      if (h.deviation_c === null || h.deviation_c === undefined) {
+        devEl.textContent = "—";
+      } else {
+        const sign = h.deviation_c >= 0 ? "+" : "";
+        devEl.textContent = `${sign}${Number(h.deviation_c).toFixed(2)} °C`;
+      }
+
+      const fixedLabel = h.exceeds_fixed_temp_demo_limit === null
+        ? "—"
+        : (h.exceeds_fixed_temp_demo_limit ? "EXCEEDED" : "below");
+      document.getElementById("threshold-sub").textContent =
+        `Demo threshold: +${h.deviation_threshold_c} °C (${h.required_consecutive_readings}x) · Fixed demo limit ${h.fixed_temp_demo_limit_c} °C (${fixedLabel})`;
+
+      document.getElementById("latest-reading-at").textContent = fmtTime(h.latest_reading_at);
+      document.getElementById("counters-sub").textContent =
+        `Abnormal streak: ${h.consecutive_abnormal_count}/${h.required_consecutive_readings} · Normal streak: ${h.consecutive_normal_count}/${h.recovery_consecutive_readings}`;
+    }
+
+    function renderChart(historyData) {
+      const svg = document.getElementById("temp-chart");
+      const meta = document.getElementById("chart-meta");
+      const items = (historyData.items || []).slice().reverse(); // oldest -> newest
+      svg.innerHTML = "";
+
+      if (items.length === 0) {
+        meta.textContent = "No readings yet (observed top-oil only)";
+        return;
+      }
+
+      const temps = items.map(d => Number(d.top_oil_temp_c));
+      const minT = Math.min(...temps);
+      const maxT = Math.max(...temps);
+      const pad = Math.max(2, (maxT - minT) * 0.15);
+      const yMin = minT - pad;
+      const yMax = maxT + pad;
+
+      const W = 800, H = 220, ML = 48, MR = 16, MT = 16, MB = 26;
+      const plotW = W - ML - MR;
+      const plotH = H - MT - MB;
+
+      const xOf = (i) => items.length === 1 ? ML + plotW / 2 : ML + (i / (items.length - 1)) * plotW;
+      const yOf = (t) => MT + (1 - (t - yMin) / (yMax - yMin || 1)) * plotH;
+
+      const ns = "http://www.w3.org/2000/svg";
+      const add = (tag, attrs, text) => {
+        const el = document.createElementNS(ns, tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        if (text !== undefined) el.textContent = text;
+        svg.appendChild(el);
+      };
+
+      // Grid lines & Y labels
+      for (let g = 0; g <= 2; g++) {
+        const val = yMin + (g / 2) * (yMax - yMin);
+        const y = yOf(val);
+        add("line", { x1: ML, y1: y, x2: W - MR, y2: y, stroke: "#334155", "stroke-dasharray": "4 4" });
+        add("text", { x: ML - 8, y: y + 4, fill: "#94a3b8", "font-size": "11", "text-anchor": "end" }, val.toFixed(1));
+      }
+
+      if (items.length > 1) {
+        const pts = items.map((d, i) => `${xOf(i).toFixed(1)},${yOf(Number(d.top_oil_temp_c)).toFixed(1)}`).join(" ");
+        add("polyline", { fill: "none", stroke: "#38bdf8", "stroke-width": "2.5", points: pts });
+      }
+
+      items.forEach((d, i) => {
+        add("circle", { cx: xOf(i).toFixed(1), cy: yOf(Number(d.top_oil_temp_c)).toFixed(1), r: "3.5", fill: "#38bdf8" });
+      });
+
+      add("text", { x: ML, y: H - 6, fill: "#94a3b8", "font-size": "11" }, fmtTime(items[0].recorded_at));
+      add("text", { x: W - MR, y: H - 6, fill: "#94a3b8", "font-size": "11", "text-anchor": "end" }, fmtTime(items[items.length - 1].recorded_at));
+
+      meta.textContent = `${items.length} reading(s) · Observed range ${minT.toFixed(1)}–${maxT.toFixed(1)} °C`;
+    }
+
+    function renderAlerts(alertsData) {
+      const tbody = document.getElementById("alerts-tbody");
+      const meta = document.getElementById("alerts-meta");
+      const items = alertsData.items || [];
+      meta.textContent = `${items.length} episode(s)`;
+
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">No alerts recorded yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = "";
+      for (const a of items) {
+        const tr = document.createElement("tr");
+        const pillClass = a.status === "open" ? "pill-open" : "pill-recovered";
+
+        const tdStatus = document.createElement("td");
+        const span = document.createElement("span");
+        span.className = `pill ${pillClass}`;
+        span.textContent = a.status;
+        tdStatus.appendChild(span);
+
+        const tdOpened = document.createElement("td");
+        tdOpened.textContent = fmtTime(a.opened_at);
+
+        const tdReason = document.createElement("td");
+        tdReason.textContent = a.opened_reason;
+
+        const tdPeak = document.createElement("td");
+        tdPeak.textContent = `+${Number(a.peak_deviation_c).toFixed(2)} °C`;
+
+        const tdRec = document.createElement("td");
+        tdRec.textContent = fmtTime(a.recovered_at);
+
+        tr.append(tdStatus, tdOpened, tdReason, tdPeak, tdRec);
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function pollOnce() {
+      try {
+        const [hRes, histRes, aRes] = await Promise.all([
+          fetch(`/assets/${ASSET_ID}/health`, { cache: "no-store" }),
+          fetch(`/assets/${ASSET_ID}/history?limit=60`, { cache: "no-store" }),
+          fetch(`/assets/${ASSET_ID}/alerts?limit=25`, { cache: "no-store" }),
+        ]);
+
+        if (!hRes.ok || !histRes.ok || !aRes.ok) {
+          throw new Error(`HTTP ${hRes.status}/${histRes.status}/${aRes.status}`);
+        }
+
+        const [health, history, alerts] = await Promise.all([
+          hRes.json(),
+          histRes.json(),
+          aRes.json(),
+        ]);
+
+        hasSuccessfulPoll = true;
+        document.getElementById("connection-badge").classList.add("hidden");
+        document.getElementById("error-banner").classList.add("hidden");
+        document.getElementById("last-refreshed").textContent = new Date().toISOString();
+
+        renderHealth(health);
+        renderChart(history);
+        renderAlerts(alerts);
+      } catch (err) {
+        document.getElementById("connection-badge").classList.remove("hidden");
+        document.getElementById("error-banner").classList.remove("hidden");
+        document.getElementById("error-detail").textContent = err && err.message ? err.message : "network error";
+        if (!hasSuccessfulPoll) {
+          setHealthBadge("API unreachable");
+        }
+      }
+    }
+
+    pollOnce();
+    setInterval(pollOnce, POLL_MS);
+  </script>
+</body>
+</html>

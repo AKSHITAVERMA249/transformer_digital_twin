@@ -17,10 +17,16 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Run the Server
+## Run the Server & Dashboard
 
 ```bash
 uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Open the live dashboard in your browser at:
+
+```text
+http://127.0.0.1:8000/
 ```
 
 ## Run the Simulator

@@ -9,7 +9,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.db import (
     ConflictError,
@@ -33,6 +33,7 @@ MAX_HISTORY_LIMIT = 1000
 DEFAULT_HISTORY_LIMIT = 100
 HISTORY_SORT_ORDER = "recorded_at DESC, id DESC"
 ALERTS_SORT_ORDER = "opened_at DESC, id DESC"
+DASHBOARD_HTML_PATH = Path(__file__).resolve().parent / "static" / "index.html"
 
 
 def get_db_path() -> Path:
@@ -85,6 +86,11 @@ def create_app(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": jsonable_encoder(_sanitize_json_value(exc.errors()))},
         )
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/dashboard", include_in_schema=False)
+    def dashboard() -> FileResponse:
+        return FileResponse(DASHBOARD_HTML_PATH, media_type="text/html")
 
     @app.get("/health")
     def health() -> dict[str, str]:
